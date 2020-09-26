@@ -1,0 +1,213 @@
+---
+title: "Unidad 2 Machine Learning Classification"
+output: html_notebook
+---
+## *Bibliografia*
+
+ - *ISLR. **Cap. 8** *
+ - *Kotu, V. & Deshpande, B. (2019). "Data Science: concepst and Practice". **Cap. 4** *
+```{r include=FALSE}
+
+
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+```
+ 
+## Áboles de desición
+
+Poseen la ventaja de que son fáciles de configurar y, desde el punto de vista de un usuario empresarial, son fáciles de interpretar. Los **árboles de clasificación**, como su nombre lo indica, se utilizan para separar un conjunto de datos en clases que pertenecen a la variable de respuesta. Por lo general, la variable de respuesta tiene dos clases: Sí o No (1 o 0).
+
+Buscan dividir al conjunto de datos, de acuerdo a determinadas variables de forma de generar distintos subgrupos (nodos) dentro de los cuales se acumulan un subgrupo de observaciones que satisfacen (o no) determinada regla impuesta por el árbol. El objetivo de este algoritmo es generar subconjuntos de observaciones lo más "puras"(homogeneas) posibles. 
+
+Lo importante es entonces determinar de que manera se obtienen estos subconjuntos. Existen diferentes criterios y que construirán diferentes árboles a través de diferentes sesgos. Para ellos hay varios criterios útiles:
+
+ - **Entropía**:
+ 
+ $D = -\sum_{k=1}^{m} p_klog_2(p_k)$
+ 
+ donde k = 1, 2, 3,...,$m$ representa las $m$ clases de la variable objetivo y $(p_k)$ es la proporción de observaciones pertenecientes a las clase $m$ (dentro de ese subset). Este indicador tomará un valor pequeño si la partición de un nodo es relativamente pura (0 es lo más pura posible y 1 es lo más impura).
+\
+\
+Ejemplo. Tengo un dataset donde todas mis observaciones se dividen entre dos clases (A o B). Genero distintas combinaciones del mismo dataset donde las proporciones entre las dos clases varían y calcula la entropía.
+ - 
+```{r}
+a <- data.frame(claseA = seq(from=0,to =0.5 ,by = 0.05),
+                claseB = seq(from=1,to = 0.5,by = -0.05))
+entropia <- function(proporciones1,proporciones2) {
+  - (proporciones1*log(proporciones1,base = 2) +
+    proporciones2*log(proporciones2,base = 2))
+}
+x <- NULL
+for (i in 1:nrow(a)) {
+  x[i] <- entropia(a[i,1],a[i,2])  
+}
+print(x)
+```
+
+En caso que todos los casos se concentren en una sola clase (primer resultado, sería 0 no se porqué da NaN) la entropía será muy baja y el algoritmo "detectaría" que es provechoso hacer el corte entre estas clases. El caso opuesto es donde cada clase tiene el 50% de los casos por lo que no tiene sentido hacer el corte sobre esa variable ya que no estoy ganando información.
+
+- **Gini**:
+
+El índice de Gini (G) es similar a la medida de entropía en sus características y se define como
+
+ $G = 1-\sum_{k=1}^{m} p_k^2$
+
+La lógica de este indicador es similar al de entropía pero sus valores van del 0(clases perfectamente diferenciadas) y 0.5 (clases con identica distribución).
+```{r}
+a <- data.frame(claseA = seq(from=0,to =0.5 ,by = 0.05),
+                claseB = seq(from=1,to = 0.5,by = -0.05))
+gini <- function(proporciones1,proporciones2) {
+  1 - ((proporciones1^2) +(proporciones2^2))
+}
+x <- NULL
+for (i in 1:nrow(a)) {
+  x[i] <- gini(a[i,1],a[i,2])  
+}
+print(x)
+```
+El indice va de la perfecta separación a una distribución equitativa de la clase.
+
+Ejemplo de arbol de clasificación con set de Golf y el indice de entropía. Busco predecir si dadas condiciones climaticas un golfista jugará o no a partir de un trainning set de 14 observaciones.
+
+```{r}
+golf <- data.frame(Clima = c("Sunny",
+"Sunny","Overcast","Rain","Rain","Rain","Overcast","Sunny",
+"Sunny","Rain","Sunny","Overcast","Overcast","Rain"),
+Temperatura = c(85,80,83,70,68,65,64,72,69,75,75,72,81,71),
+Humedad = c(85,90,78,96,80,70,65,95,70,80,70,90,75,80),
+Viento = c(FALSE,TRUE,FALSE,FALSE,FALSE,TRUE,TRUE,FALSE,FALSE,FALSE,TRUE,TRUE,FALSE,TRUE),
+Juegan = c("no","no","yes","yes","yes","no","yes","no","yes","yes","yes","yes","yes","no"))
+```
+
+```{r echo=TRUE}
+#Overcast
+golf <- golf %>% 
+  mutate(clima_overcast = ifelse(Clima == "Overcast",1,0))
+unique(golf$Clima)
+#Saco la proporción de cada opción
+prop_overcast_juegan <- table(golf$clima_overcast,golf$Juegan)[2,2]/sum(golf$clima_overcast)
+prop_overcast_no_juegan <- table(golf$clima_overcast,golf$Juegan)[2,1]/sum(golf$clima_overcast)
+
+entropia_clima_overcast <- entropia(proporciones1 = prop_overcast_juegan,
+                                    proporciones2 = prop_no_overcast_juegan)
+entropia_clima_overcast <- 0 #me da un indice de entropía bajisimo (0)
+
+gini_clima_overcast <- gini(proporciones1 = prop_overcast_juegan,
+                            proporciones2 = prop_no_overcast_juegan)
+gini_clima_overcast#me da un indice de gini bajisimo(0)
+```
+```{r echo=TRUE}
+#Sunny
+golf <- golf %>% 
+  mutate(clima_Sunny = ifelse(Clima == "Sunny",1,0))
+
+#Saco la proporción de cada opción
+prop_sunny_juegan <- table(golf$clima_Sunny,golf$Juegan)[2,2]/sum(golf$clima_Sunny)
+prop_sunny_no_juegan <- table(golf$clima_Sunny,golf$Juegan)[2,1]/sum(golf$clima_Sunny)
+
+entropia_clima_sunny <- entropia(proporciones1 = prop_sunny_juegan,
+                                    proporciones2 = prop_sunny_no_juegan)
+entropia_clima_sunny#me da un indice de entropía bastante alto (0.97)
+
+gini_clima_sunny <- gini(proporciones1 = prop_sunny_juegan,
+                            proporciones2 = prop_sunny_no_juegan)
+gini_clima_sunny#me da un indice de gini bajisimo(0.48)
+```
+```{r echo=TRUE}
+#Rain
+golf <- golf %>% 
+  mutate(clima_Rain = ifelse(Clima == "Rain",1,0))#Creo un variable que es 1 si los días son "overcast"
+
+#Saco la proporción de cada opción
+prop_rain_juegan <- table(golf$clima_Rain,golf$Juegan)[2,2]/sum(golf$clima_Rain)
+prop_rain_no_juegan <- table(golf$clima_Rain,golf$Juegan)[2,1]/sum(golf$clima_Rain)
+
+entropia_clima_Rain <- entropia(proporciones1 = prop_rain_juegan,
+                                    proporciones2 = prop_rain_no_juegan)
+entropia_clima_Rain#me da un indice de entropía bastante alto (0.97)
+
+gini_clima_Rain <- gini(proporciones1 = prop_rain_juegan,
+                            proporciones2 = prop_rain_no_juegan)
+gini_clima_Rain#me da un indice de gini bajisimo(0.48)
+
+```
+
+Ahora que tengo los indices tengo que ponderarlos respecto a al total de muestras que abarca cada alternativa de clima. A esto le llamaré *entropía conjunta*.
+```{r}
+i_clim <-  table(golf$Clima)[1]/nrow(golf)*entropia_clima_overcast +
+  table(golf$Clima)[2]/nrow(golf)* entropia_clima_Rain +
+  table(golf$Clima)[3]/nrow(golf)*entropia_clima_sunny
+```
+Finalmente, debo calcular la ganancia de agregar esta rama al arbol en comparación a no incluirlo (dejar que el data set se divida en juega o no juega). Seria como calcular el indice de entropía sin hacer divisiones.
+
+```{r}
+
+prop.table(table(golf$Juegan))
+i_golf <- entropia(prop.table(table(golf$Juegan))[1],prop.table(table(golf$Juegan))[2])
+```
+
+La diferencia entre "no hacer nada" y sumar el criterio del clima, me da una ganancia de 0.245
+```{r}
+information_gain_clima <- c(i_golf-i_clim)
+unlist(information_gain_clima)
+```
+
+Ventajas de los árboles de desición:
+
+ - Los árboles son muy fáciles de explicar a las personas. De hecho, son incluso más fáciles
+explicar que la regresión lineal!
+ - Algunas personas creen que los árboles de decisión reflejan más de cerca a los humanos.
+toma de decisiones que los enfoques de regresión y clasificación vistos en capítulos anteriores.
+ - Los árboles se pueden mostrar gráficamente y se interpretan fácilmente incluso por
+un no experto (especialmente si son pequeños).
+ - Los árboles pueden manejar fácilmente predictores cualitativos sin la necesidad de
+crear variables ficticias.
+
+Desventajas de los árboles de desició:
+
+ - Desafortunadamente, los árboles generalmente no tienen el mismo nivel de predicción
+precisión como algunos de los otros enfoques de regresión y clasificación que se ven en este libro.
+ - Además, los árboles pueden ser muy poco robustos. En otras palabras, un pequeño cambio en los datos puede provocar un gran cambio en el árbol estimado final.
+  - El **sobreajuste** se produce cuando un modelo intenta memorizar los datos de entrenamiento en lugar de generalizar la relación entre las variables de entrada y salida. El sobreajuste a menudo tiene el efecto de un buen rendimiento en el conjunto de datos de entrenamiento, pero un rendimiento deficiente en cualquier dato nuevo que el modelo no haya visto anteriormente. Como se mencionó anteriormente, el sobreajuste de un árbol de decisiones no solo genera dificultades para interpretar el modelo, sino que también proporciona un modelo bastante inútil para datos invisibles.
+  
+Para evitar este *overfiting* podemos optar por algunas estrategias para "podar" el árbol:
+  - Limitar la creación de un nuevo nodo a determinado nivel de *information gain*.
+  - Etablecer un mínimo de casos para cada nodo terminal o un mínimo de nodos.
+  
+  
+# Caso Práctico usando los paquetes rpart y rpart.plot
+
+```{r}
+data_iris <- iris %>% 
+  mutate(ESPECIE = ifelse(Species == "setosa",1,0))
+
+index_1 <- c(sample(which(data_iris$ESPECIE == 1),floor(0.7*sum(data_iris$ESPECIE==1))),
+             sample(which(data_iris$ESPECIE == 0),floor(0.7*sum(data_iris$ESPECIE==0))))
+
+iris_train_set <- data_iris[index_1,]
+iris_test_set <- data_iris[-index_1,]
+
+arbol1 <- rpart(formula =ESPECIE ~Sepal.Width + Sepal.Length  ,#uso info del sepal
+      data = iris_train_set,
+      method = "class")
+
+rpart.plot(arbol1)
+```
+```{r}
+respuesta_arbol1 <- predict(object = arbol1,newdata =iris_test_set,type = "class")
+
+table(respuesta_arbol1,iris_test_set$ESPECIE)
+
+accuracy_arbol1 <- table(respuesta_arbol1,iris_test_set$ESPECIE)[2,2]/length(respuesta_arbol1)
+precision_arbol1 <- table(respuesta_arbol1,iris_test_set$ESPECIE)[2,2]/sum(table(respuesta_arbol1,iris_test_set$ESPECIE)[2,])
+sensibilidad_arbol1 <- table(respuesta_arbol1,iris_test_set$ESPECIE)[2,2]/sum(table(respuesta_arbol1,iris_test_set$ESPECIE)[,2])
+especificidad_arbol1 <-table(respuesta_arbol1,iris_test_set$ESPECIE)[1,1]/sum(table(respuesta_arbol1,iris_test_set$ESPECIE)[,1]) 
+
+accuracy_arbol1
+precision_arbol1
+sensibilidad_arbol1 
+especificidad_arbol1
+
+```
+
